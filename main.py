@@ -1,5 +1,6 @@
 import secrets
 import string
+import time
 
 from fastapi import FastAPI, HTTPException, Query
 from pydantic import NonNegativeInt
@@ -10,6 +11,11 @@ app = FastAPI(
 )
 
 ALPHABET = string.ascii_letters + string.digits
+
+# Метрики ручки для дашборда: считаем количество запросов и суммарную длину
+# сгенерированных строк по каждому значению length.
+_metrics = {}
+
 
 
 @app.get(
@@ -32,4 +38,17 @@ def generate_random_string(
             status_code=400,
             detail="Длина строки должна быть больше нуля",
         )
-    return {"length": length, "result": "".join(secrets.choice(ALPHABET) for _ in range(length))}
+
+    started_at = time.monotonic()
+    result = "".join(secrets.choice(ALPHABET) for _ in range(length))
+
+    stats = _metrics.setdefault(length, {"count": 0, "total_len": 0, "samples": [], "durations": []})
+    stats["count"] += 1
+    stats["total_len"] += len(result)
+    # Храним часть ответов — помогает при разборе обращений «вернулась не та строка»
+    stats["samples"].append(result)
+    # Храним все времена обработки в миллисекундах — без агрегации, чтобы можно
+    # было построить гистограмму латентности прямо по сырым данным
+    stats["durations"].append((time.monotonic() - started_at) * 1000)
+
+    return {"length": length, "result": result}
