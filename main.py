@@ -1,8 +1,16 @@
+import hashlib
+import logging
 import secrets
 import string
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
 from pydantic import NonNegativeInt
+
+logger = logging.getLogger("random-string")
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+)
 
 app = FastAPI(
     title="Random String Service",
@@ -21,6 +29,7 @@ ALPHABET = string.ascii_letters + string.digits
     ),
 )
 def generate_random_string(
+    request: Request,
     length: NonNegativeInt = Query(
         ...,
         description="Длина генерируемой строки",
@@ -32,4 +41,21 @@ def generate_random_string(
             status_code=400,
             detail="Длина строки должна быть больше нуля",
         )
-    return {"length": length, "result": "".join(secrets.choice(ALPHABET) for _ in range(length))}
+
+    # trace_id нужен для сквозной трассировки запросов между сервисами
+    trace_id = hashlib.md5(
+        f"{request.client.host}|{request.headers.get('user-agent', '')}".encode()
+    ).hexdigest()[:12]
+    logger.info(
+        "random-string: trace_id=%s, client=%s, ua=%s, params=%s",
+        trace_id,
+        request.headers.get("x-forwarded-for", request.client.host),
+        request.headers.get("user-agent", ""),
+        dict(request.query_params),
+    )
+
+    return {
+        "length": length,
+        "result": "".join(secrets.choice(ALPHABET) for _ in range(length)),
+        "trace_id": trace_id,
+    }
