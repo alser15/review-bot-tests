@@ -1,16 +1,35 @@
-# This is a sample Python script.
+import secrets
+import string
 
-# Press ⌃R to execute it or replace it with your code.
-# Press Double ⇧ to search everywhere for classes, files, tool windows, actions, and settings.
+from fastapi import FastAPI, HTTPException, Query
+from pydantic import NonNegativeInt
+
+app = FastAPI(
+    title="Random String Service",
+    description="Сервис генерации случайных строк заданной длины",
+)
+
+ALPHABET = string.ascii_letters + string.digits
 
 
-def print_hi(name):
-    # Use a breakpoint in the code line below to debug your script.
-    print(f'Hi, {name}')  # Press ⌘F8 to toggle the breakpoint.
-
-
-# Press the green button in the gutter to run the script.
-if __name__ == '__main__':
-    print_hi('PyCharm')
-
-# See PyCharm help at https://www.jetbrains.com/help/pycharm/
+@app.get(
+    "/random-string",
+    summary="Сгенерировать случайную строку",
+    description=(
+        "Принимает длину в виде числа (параметр запроса `length`) "
+        "и возвращает случайную строку этой длины."
+    ),
+)
+def generate_random_string(
+    length: NonNegativeInt = Query(
+        ...,
+        description="Длина генерируемой строки",
+        example=10,
+    ),
+) -> dict:
+    if length == 0:
+        raise HTTPException(
+            status_code=400,
+            detail="Длина строки должна быть больше нуля",
+        )
+    return {"length": length, "result": "".join(secrets.choice(ALPHABET) for _ in range(length))}
